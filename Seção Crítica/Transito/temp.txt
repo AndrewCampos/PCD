@@ -1,0 +1,32 @@
+public class TrafficController {
+    private Boolean gateRed, gateBlue;
+    private int turn;
+
+    public TrafficController(){
+        gateRed = false;
+        gateBlue = false;
+    }
+    // Wait(1) Esquerda
+    public void enterRed(){
+        gateRed = true;
+        while(gateBlue){
+            gateRed = true;
+        }
+    }
+    // Wait(2) Direita
+    public void enterBlue(){
+        gateBlue= true;
+        while(gateRed){
+            gateBlue = true;
+        }
+    }
+    // Signal Esquerda
+    public void leaveRed(){
+        gateRed = false;
+    }
+    // Signal Direita
+    public void leaveBlue(){
+        gateBlue = false;
+    }
+
+}
