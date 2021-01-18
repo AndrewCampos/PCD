@@ -3,8 +3,8 @@
 #include<omp.h> 
 #include <unistd.h>
 
-#define MAX_THREADS 2
-#define MAX_REQUESTS 2000
+#define MAX_THREADS 4
+#define MAX_REQUESTS 20000
 
 int soma=0, respond=0, request=0, id;
 unsigned int num_requests = 1;
