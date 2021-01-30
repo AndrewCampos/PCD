@@ -1,13 +1,11 @@
-### Procedimento para executar programa em MPI
+## Procedimento para executar programa em MPI
 
-- **Instalar:**
++ **Instalar:**
   - sudo apt-get install libopenmpi-dev openmpi-bin libhdf5-openmpi-dev
-- **Compilar:**
++ **Compilar:**
   - mpicc <nome do arquivo> -o <nome da saída>
-- **Rodar:**
++ **Executar:**
   - mpirun -np <num processos> <arquivo compilado>
-
----
 
 **Exemplo para _hello\_mpi.c_**
 
