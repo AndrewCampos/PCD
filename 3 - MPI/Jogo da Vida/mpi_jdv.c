@@ -3,13 +3,15 @@
 #include <stdlib.h>
 #include<sys/time.h>
 
-#define NUM_GEN 2000 // Numero de geracoes
-#define TAM 1024 // Tamanho N da matriz NxN
-#define SRAND_VALUE 1985
+#define NUM_GEN 2 // Numero de geracoes
+#define TAM 2048 // Tamanho N da matriz NxN
+#define SRAND_VALUE 1985 // Seed para srand()
 #define vivo 1
 #define morto 0
+#define PRIN_PROC 0
 
-int **grid, **newgrid;
+int **grid, **newgrid; // matrizes de geracao
+int bufSnd[TAM], bufRcv[TAM]; // Buffers de comunicacao
 
 typedef struct{
     int secs;
@@ -36,6 +38,11 @@ TIME_DIFF * my_difftime (struct timeval *start, struct timeval *end){
     return diff;
 }
 
+void imprimeMat(int **mat){
+    int i,j;
+
+}
+
 // Retorna a quantidade de vizinhos vivos de cada celula na posicao ​i,j
 int getNeighbors(int i, int j) {
     int count=0;
@@ -54,10 +61,11 @@ int getNeighbors(int i, int j) {
 }
 
 // Cria uma nova geracao de acordo com as regras estabelecidas
-void novaGeracao(){
+void novaGeracao(int numProc, int part, int rank){
     int i, j;
+    int ini = part*rank;
     
-    for(i=0;i<TAM; i++){     
+    for(i=ini;i<(ini+part); i++){     
         for(j = 0; j<TAM; j++){
             if (grid[i][j]){ // Se estiver vivo
                 if (getNeighbors(i,j) < 2 || getNeighbors(i,j) > 3) // Regra A e C
@@ -97,13 +105,13 @@ int contaPopulacao(){
 
 // Rotina do processo principal
 void prinProc(int numProc){
-    int i,j,origem,tag=0,div=0;
-    int bufTam = TAM*(TAM/numProc);
-    int bufRcv[TAM/numProc][TAM];
+    int i,j,origem,tag=0,div=0,rank,gen;
+    int part = TAM/numProc;
     TIME_DIFF *time;
     struct timeval start, end;
 
-    printf("Sistema principal iniciado!\n");
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+    printf("Sistema principal iniciado! [%d]\n",rank);
     gettimeofday (&start, NULL);
     
     // Alocacao das matrizes
@@ -123,22 +131,36 @@ void prinProc(int numProc){
     }
     div = i;
     for(origem=1;origem<numProc;origem++){
-        MPI_Recv(bufRcv,bufTam,MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-        printf("Mensagem recebida!\n");
-        for(i=0;i<TAM/numProc;i++){
+        for(i=div;i<(origem+1)*part;i++){
+            MPI_Recv(bufRcv,TAM,MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
             for(j=0;j<TAM;j++){
-                grid[i+div][j] = bufRcv[i][j];
+                grid[i][j] = bufRcv[j];
             }
         }
         div+=i;
     }
-    tag++;
 
     printf("Condicao Inicial: %d Celulas Vivas\n", contaPopulacao());
 
     // Gera NUM_GEN geracoes a partir da primeira
-    for(i=0;i<NUM_GEN;i++){
-        novaGeracao();
+    for(gen=0;gen<NUM_GEN;gen++){
+        for(i=0;i<TAM;i++){ // Envia tabela
+            for(j=0;j<TAM;j++) bufSnd[j] = grid[i][j];
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Bcast(bufSnd,TAM,MPI_INT,PRIN_PROC,MPI_COMM_WORLD);
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
+
+        novaGeracao(numProc,part,rank);
+
+        for(origem=1;origem<numProc;origem++){
+            for(i=(part*origem);i<(part*(origem+1));i++){
+                MPI_Recv(bufRcv,TAM,MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+                for(j=0;j<TAM;j++){
+                    grid[i][j] = bufRcv[j];
+                }
+            }
+        }
     }
 
     printf("Ultima Geracao: %d Celulas Vivas\n", contaPopulacao());
@@ -150,19 +172,48 @@ void prinProc(int numProc){
 
 // Rotina do processo secundario
 void secProc(int numProc){
-    int tag=0,dest=0,i,j, bufTam = TAM*(TAM/numProc);
-    int bufSnd[TAM/numProc][TAM];
-    printf("Sistema secundario iniciado!\n");
+    int tag=0,dest=0,i,j,gen,rank,part=TAM/numProc;
+
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+    printf("Sistema secundario iniciado! [%d]\n",rank);
+
+    // Alocacao das matrizes
+    grid = malloc(sizeof(int*)*TAM);
+    newgrid = malloc(sizeof(int*)*TAM);
+    for(i=0;i<TAM;i++){
+        grid[i] = malloc(sizeof(int)*TAM);
+        newgrid[i] = malloc(sizeof(int)*TAM);
+    }
 
     // Gera a segunda metade da primeira geracao pseudoaleatoriamente
     srand(SRAND_VALUE);
     for(i=0;i<(TAM/numProc); i++){     
         for(j = 0; j<TAM; j++){
-            bufSnd[i][j] = rand() % 2;  
+            grid[i][j] = rand() % 2;  
         }
     }
 
-    MPI_Send(bufSnd,bufTam,MPI_INT,dest,tag,MPI_COMM_WORLD);
+    for(i=0;i<TAM/numProc;i++){
+        for(j=0;j<TAM;j++) bufSnd[j] = grid[i][j];
+        MPI_Send(bufSnd,TAM,MPI_INT,dest,tag,MPI_COMM_WORLD);
+    }
+
+    for(gen=0;gen<NUM_GEN;gen++){
+        printf("Geração %d\n",gen);
+        for(i=0;i<TAM;i++){ // recebe a tabela
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Bcast(bufRcv,TAM,MPI_INT,PRIN_PROC,MPI_COMM_WORLD);
+            MPI_Barrier(MPI_COMM_WORLD);
+            for(j=0;j<TAM;j++) grid[i][j] = bufRcv[j];
+        }
+
+        novaGeracao(numProc,part,rank);
+
+        for(i=(part*rank);i<part*(rank+1);i++){ // envia tabela
+            for(j=0;j<TAM;j++) bufSnd[j] = grid[i][j];
+            MPI_Send(bufSnd,TAM,MPI_INT,dest,tag,MPI_COMM_WORLD);
+        }
+    }
 }
 
 int main(int argc, char *argv[]){
