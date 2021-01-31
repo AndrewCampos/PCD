@@ -1,10 +1,10 @@
-#include <mpi.h>
+#include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include<sys/time.h>
 
 #define NUM_GEN 2000 // Numero de geracoes
-#define TAM 1024 // Tamanho N da matriz NxN
+#define TAM 16 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985
 #define vivo 1
 #define morto 0
@@ -34,6 +34,27 @@ TIME_DIFF * my_difftime (struct timeval *start, struct timeval *end){
         }
     }
     return diff;
+}
+
+// Imprime as duas primeiras geracoes
+void imprimeGeracao(int **mat){
+    int i, j;
+    for(i=0;i<TAM; i++){     
+        for(j = 0; j<TAM; j++){
+            printf("%d ",mat[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+// Imprime as duas primeiras geracoes
+void inicializa(int **mat){
+    int i, j;
+    for(i=0;i<TAM; i++){     
+        for(j = 0; j<TAM; j++){
+            mat[i][j] = 0;
+        }
+    }
 }
 
 // Retorna a quantidade de vizinhos vivos de cada celula na posicao ​i,j
@@ -98,8 +119,7 @@ int contaPopulacao(){
 // Rotina do processo principal
 void prinProc(int numProc){
     int i,j,origem,tag=0,div=0;
-    int bufTam = TAM*(TAM/numProc);
-    int bufRcv[TAM/numProc][TAM];
+    int **bufRcv;
     TIME_DIFF *time;
     struct timeval start, end;
 
@@ -108,26 +128,31 @@ void prinProc(int numProc){
     
     // Alocacao das matrizes
     grid = malloc(sizeof(int*)*TAM);
-    newgrid = malloc(sizeof(int*)*TAM);
+    newgrid = malloc(sizeof(int*)*TAM);    
     for(i=0;i<TAM;i++){
         grid[i] = malloc(sizeof(int)*TAM);
         newgrid[i] = malloc(sizeof(int)*TAM);
     }
-    // Gera a primeira metade da primeira geração pseudoaleatoriamente
-    i=1;
+
+
+    bufRcv = malloc(sizeof(int*)*(TAM/numProc));
+    for(i=0;i<TAM/numProc;i++) bufRcv[i] = malloc(sizeof(int)*TAM);
+
+    // Gera a primeira geração de forma distribuida
     srand(SRAND_VALUE);
     for(i=0;i<(TAM/numProc); i++){     
         for(j = 0; j<TAM; j++){
             grid[i][j] = rand() % 2;  
         }
     }
+    printf("Principal Finalizado! i: %d j: %d\n",i,j);
     div = i;
     for(origem=1;origem<numProc;origem++){
-        MPI_Recv(bufRcv,bufTam,MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-        printf("Mensagem recebida!\n");
+        MPI_Recv(bufRcv,(TAM*(TAM/numProc)),MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
         for(i=0;i<TAM/numProc;i++){
             for(j=0;j<TAM;j++){
-                grid[i+div][j] = bufRcv[i][j];
+                grid[i+div][j] = 0;//bufRcv[i][j];
             }
         }
         div+=i;
@@ -148,21 +173,29 @@ void prinProc(int numProc){
     printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 }
 
-// Rotina do processo secundario
-void secProc(int numProc){
-    int tag=0,dest=0,i,j, bufTam = TAM*(TAM/numProc);
-    int bufSnd[TAM/numProc][TAM];
-    printf("Sistema secundario iniciado!\n");
+// Gera a primeira geracao pseudoaleatoriamente
+void geraLinhas(int numProc){
+    int i,j;
 
-    // Gera a segunda metade da primeira geracao pseudoaleatoriamente
     srand(SRAND_VALUE);
     for(i=0;i<(TAM/numProc); i++){     
         for(j = 0; j<TAM; j++){
-            bufSnd[i][j] = rand() % 2;  
+            grid[i][j] = rand() % 2;  
         }
     }
+    printf("Finalizado! i: %d j: %d\n",i,j);
+}
 
-    MPI_Send(bufSnd,bufTam,MPI_INT,dest,tag,MPI_COMM_WORLD);
+// Rotina do processo secundario
+void secProc(int numProc){
+    int tag=0,dest=0,i;
+
+    grid = malloc(sizeof(int*)*(TAM/numProc));
+    for(i=0;i<(TAM/numProc);i++) grid[i] = malloc(sizeof(int)*TAM);
+
+    printf("Sistema secundario iniciado!\n");
+    geraLinhas(numProc);
+    MPI_Send(grid,(TAM*(TAM/numProc)),MPI_INT,dest,tag,MPI_COMM_WORLD);
 }
 
 int main(int argc, char *argv[]){
