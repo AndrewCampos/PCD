@@ -6,16 +6,21 @@
 #define NUM_GEN 2000 // Numero de geracoes
 #define TAM 2048 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985
-#define MAX_THREADS 2
+#define MAX_THREADS 8
 #define vivo 1
 #define morto 0
-
-int **grid, **newgrid;
+#define OCUPADO 1
+#define LIVRE 0
 
 typedef struct {
     int secs;
     int usecs;
 }TIME_DIFF;
+
+typedef int BOOL;
+
+int **grid, **newgrid, *senhas, segs, usegs;
+BOOL critical_sec = LIVRE;
 
 // Calcula o tempo decorrido entre um intervalo de tempo
 TIME_DIFF * my_difftime (struct timeval *start, struct timeval *end){
@@ -76,7 +81,7 @@ void novaGeracao(){
         }
     }
 
-    #pragma omp parallel private(j) num_threads(MAX_THEADS)
+    #pragma omp parallel private(j) num_threads(MAX_THREADS)
     #pragma omp for
     for(i=0;i<TAM; i++){     
         for(j = 0; j<TAM; j++){
@@ -85,19 +90,49 @@ void novaGeracao(){
     }
 }
 
+// Valor da maior senha
+int MaxSenhas(){
+    int i,max=0;
+    for(i=0;i<MAX_THREADS;i++){
+        if(senhas[i] > max) max = senhas[i];
+    }
+    return max;
+}
+
+// Valor da maior senha
+int MinSenhas(){
+    int i,min=100000;
+    for(i=0;i<MAX_THREADS;i++){
+        if(senhas[i] < min && senhas[i] > 0) min = senhas[i];
+    }
+    return min;
+}
+
+void imprimeSenhas(){
+    int i;
+    for(i=0;i<MAX_THREADS;i++) printf("%d ", senhas[i]);
+    printf("\n");
+}
+
 // Conta quantas celulas estao vivas na geracao
 int contaPopulacao(){
-    int i,j,cont = 0;
+    int i,j,ID,cont = 0;
     
-    #pragma omp parallel critical
+    #pragma omp parallel private(ID) num_threads(MAX_THREADS)
     #pragma omp for
         for(i=0;i<TAM; i++){
+            ID = omp_get_thread_num();
+            senhas[ID] = MaxSenhas() + 1;
+            while(MaxSenhas() != 0 && senhas[ID] > MinSenhas());
+            // Entrada na sessao critica
             for(j = 0; j<TAM; j++){
-                if (grid[i][j])
+                if (grid[i][j]){
                     cont++;
+                }
             }
+            // Saida da sessao critica
+            senhas[ID] = 0;
         }
-
     return cont;
 }
 
@@ -109,6 +144,7 @@ int main(){
     // Alocacao das matrizes
     grid = malloc(sizeof(int*)*TAM);
     newgrid = malloc(sizeof(int*)*TAM);
+    senhas = malloc(sizeof(int)*MAX_THREADS);
     for(i=0;i<TAM;i++){
         grid[i] = malloc(sizeof(int)*TAM);
         newgrid[i] = malloc(sizeof(int)*TAM);
@@ -122,19 +158,18 @@ int main(){
         }
     }
 
+    gettimeofday (&start, NULL);
     printf("Condicao Inicial: %d Celulas Vivas\n", contaPopulacao());
+    gettimeofday (&end, NULL);
+    time = my_difftime(&start, &end);
+    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 
     // Gera NUM_GEN geracoes a partir da primeira
     for(i=0;i<NUM_GEN;i++){
         novaGeracao();
     }
 
-    gettimeofday (&start, NULL);
     printf("Ultima Geracao: %d Celulas Vivas\n", contaPopulacao());
-    gettimeofday (&end, NULL);
-    
-    time = my_difftime(&start, &end);
-    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 
     return 0;
 }

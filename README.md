@@ -14,4 +14,7 @@ Projetos feitos para a disciplina de Programação Concorrente e Distribuída na
   - **Busy Wait:** Sistema de Servidor-Cliente com algoritmo de Manna-Pnueli usando _OpenMP_
   - **Jogo da Vida**: Algoritmo do "Jogo da Vida" Utilizando _OPM Critical_, _OMP Reduction_ e um controle manual de seção crítica
   - **Transito:** Código em Java para uma simulação de controle de transito utilizando principios de seção crítica
++ **MPI** (Exercício 3)
+  - **Exemplos:** Códigos de exemplos disponibilizados pelo professor
+  - **Jogo da Vida:** Código do "Jogo da Vida" implementado de forma distribuída com MPI
   

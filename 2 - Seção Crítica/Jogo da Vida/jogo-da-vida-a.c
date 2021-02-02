@@ -1,17 +1,18 @@
-#include "mpi.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include<stdio.h>
+#include<stdlib.h>
 #include<sys/time.h>
+#include<omp.h> 
 
 #define NUM_GEN 2000 // Numero de geracoes
-#define TAM 16 // Tamanho N da matriz NxN
+#define TAM 2048 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985
+#define MAX_THREADS 8
 #define vivo 1
 #define morto 0
 
 int **grid, **newgrid;
 
-typedef struct{
+typedef struct {
     int secs;
     int usecs;
 }TIME_DIFF;
@@ -36,36 +37,14 @@ TIME_DIFF * my_difftime (struct timeval *start, struct timeval *end){
     return diff;
 }
 
-// Imprime as duas primeiras geracoes
-void imprimeGeracao(int **mat){
-    int i, j;
-    for(i=0;i<TAM; i++){     
-        for(j = 0; j<TAM; j++){
-            printf("%d ",mat[i][j]);
-        }
-        printf("\n");
-    }
-}
-
-// Imprime as duas primeiras geracoes
-void inicializa(int **mat){
-    int i, j;
-    for(i=0;i<TAM; i++){     
-        for(j = 0; j<TAM; j++){
-            mat[i][j] = 0;
-        }
-    }
-}
-
 // Retorna a quantidade de vizinhos vivos de cada celula na posicao ​i,j
 int getNeighbors(int i, int j) {
     int count=0;
-
+    
     count += grid[i][((j+1)%TAM)]; // direita
     count += grid[((i+1)%TAM)][((j+1)%TAM)]; // direita baixo
     count += grid[((i+1)%TAM)][j]; //baixo
     count += grid[((i+1)%TAM)][(TAM+(j-1))%TAM]; // esquerda baixo
-    
     count += grid[i][(TAM+(j-1))%TAM]; // esquerda
     count += grid[(TAM+(i-1))%TAM][(TAM+(j-1))%TAM]; //esquerda cima
     count += grid[(TAM+(i-1))%TAM][j]; // cima
@@ -78,7 +57,9 @@ int getNeighbors(int i, int j) {
 void novaGeracao(){
     int i, j;
     
-    for(i=0;i<TAM; i++){     
+    #pragma omp parallel private(j) num_threads(MAX_THREADS)
+    #pragma omp for
+    for(i=0;i<TAM; i++){   
         for(j = 0; j<TAM; j++){
             if (grid[i][j]){ // Se estiver vivo
                 if (getNeighbors(i,j) < 2 || getNeighbors(i,j) > 3) // Regra A e C
@@ -95,6 +76,8 @@ void novaGeracao(){
         }
     }
 
+    #pragma omp parallel private(j) num_threads(MAX_THREADS)
+    #pragma omp for
     for(i=0;i<TAM; i++){     
         for(j = 0; j<TAM; j++){
             grid[i][j] = newgrid[i][j];
@@ -105,61 +88,44 @@ void novaGeracao(){
 // Conta quantas celulas estao vivas na geracao
 int contaPopulacao(){
     int i,j,cont = 0;
-
-    for(i=0;i<TAM; i++){     
-        for(j = 0; j<TAM; j++){
-            if (grid[i][j])
-                cont++;
+    
+    #pragma omp parallel for
+        for(i=0;i<TAM; i++){
+            for(j = 0; j<TAM; j++){
+                #pragma omp critical(cont)
+                if (grid[i][j])
+                    cont++;
+            }
         }
-    }
-
     return cont;
 }
 
-// Rotina do processo principal
-void prinProc(int numProc){
-    int i,j,origem,tag=0,div=0;
-    int **bufRcv;
+int main(){
+    int i, j;
     TIME_DIFF *time;
     struct timeval start, end;
 
-    printf("Sistema principal iniciado!\n");
-    gettimeofday (&start, NULL);
-    
     // Alocacao das matrizes
     grid = malloc(sizeof(int*)*TAM);
-    newgrid = malloc(sizeof(int*)*TAM);    
+    newgrid = malloc(sizeof(int*)*TAM);
     for(i=0;i<TAM;i++){
         grid[i] = malloc(sizeof(int)*TAM);
         newgrid[i] = malloc(sizeof(int)*TAM);
     }
 
-
-    bufRcv = malloc(sizeof(int*)*(TAM/numProc));
-    for(i=0;i<TAM/numProc;i++) bufRcv[i] = malloc(sizeof(int)*TAM);
-
-    // Gera a primeira geração de forma distribuida
+    // Gera a primeira geracao pseudoaleatoriamente
     srand(SRAND_VALUE);
-    for(i=0;i<(TAM/numProc); i++){     
+    for(i=0;i<TAM; i++){     
         for(j = 0; j<TAM; j++){
             grid[i][j] = rand() % 2;  
         }
     }
-    printf("Principal Finalizado! i: %d j: %d\n",i,j);
-    div = i;
-    for(origem=1;origem<numProc;origem++){
-        MPI_Recv(bufRcv,(TAM*(TAM/numProc)),MPI_INT,origem,tag,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
-        for(i=0;i<TAM/numProc;i++){
-            for(j=0;j<TAM;j++){
-                grid[i+div][j] = 0;//bufRcv[i][j];
-            }
-        }
-        div+=i;
-    }
-    tag++;
-
+    gettimeofday (&start, NULL);
     printf("Condicao Inicial: %d Celulas Vivas\n", contaPopulacao());
+    gettimeofday (&end, NULL);
+    time = my_difftime(&start, &end);
+    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 
     // Gera NUM_GEN geracoes a partir da primeira
     for(i=0;i<NUM_GEN;i++){
@@ -168,50 +134,5 @@ void prinProc(int numProc){
 
     printf("Ultima Geracao: %d Celulas Vivas\n", contaPopulacao());
 
-    gettimeofday (&end, NULL);
-    time = my_difftime(&start, &end);
-    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
-}
-
-// Gera a primeira geracao pseudoaleatoriamente
-void geraLinhas(int numProc){
-    int i,j;
-
-    srand(SRAND_VALUE);
-    for(i=0;i<(TAM/numProc); i++){     
-        for(j = 0; j<TAM; j++){
-            grid[i][j] = rand() % 2;  
-        }
-    }
-    printf("Finalizado! i: %d j: %d\n",i,j);
-}
-
-// Rotina do processo secundario
-void secProc(int numProc){
-    int tag=0,dest=0,i;
-
-    grid = malloc(sizeof(int*)*(TAM/numProc));
-    for(i=0;i<(TAM/numProc);i++) grid[i] = malloc(sizeof(int)*TAM);
-
-    printf("Sistema secundario iniciado!\n");
-    geraLinhas(numProc);
-    MPI_Send(grid,(TAM*(TAM/numProc)),MPI_INT,dest,tag,MPI_COMM_WORLD);
-}
-
-int main(int argc, char *argv[]){
-    int rank; // ID do processo
-    int numProc; // numero de processos
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &numProc);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
-    if(rank == 0){ // caso seja o processo principal
-        prinProc(numProc);
-    }else{
-        secProc(numProc);
-    }
-
-    MPI_Finalize();
     return 0;
 }

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include<sys/time.h>
 
-#define NUM_GEN 2 // Numero de geracoes
+#define NUM_GEN 2000 // Numero de geracoes
 #define TAM 2048 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985 // Seed para srand()
 #define vivo 1
@@ -36,11 +36,6 @@ TIME_DIFF * my_difftime (struct timeval *start, struct timeval *end){
         }
     }
     return diff;
-}
-
-void imprimeMat(int **mat){
-    int i,j;
-
 }
 
 // Retorna a quantidade de vizinhos vivos de cada celula na posicao ​i,j
@@ -122,9 +117,8 @@ void prinProc(int numProc){
         newgrid[i] = malloc(sizeof(int)*TAM);
     }
     // Gera a primeira metade da primeira geração pseudoaleatoriamente
-    i=1;
     srand(SRAND_VALUE);
-    for(i=0;i<(TAM/numProc); i++){     
+    for(i=0;i<(part); i++){     
         for(j = 0; j<TAM; j++){
             grid[i][j] = rand() % 2;  
         }
@@ -137,7 +131,7 @@ void prinProc(int numProc){
                 grid[i][j] = bufRcv[j];
             }
         }
-        div+=i;
+        div=i;
     }
 
     printf("Condicao Inicial: %d Celulas Vivas\n", contaPopulacao());
@@ -177,6 +171,8 @@ void secProc(int numProc){
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
     printf("Sistema secundario iniciado! [%d]\n",rank);
 
+
+
     // Alocacao das matrizes
     grid = malloc(sizeof(int*)*TAM);
     newgrid = malloc(sizeof(int*)*TAM);
@@ -187,19 +183,22 @@ void secProc(int numProc){
 
     // Gera a segunda metade da primeira geracao pseudoaleatoriamente
     srand(SRAND_VALUE);
-    for(i=0;i<(TAM/numProc); i++){     
+    for(i=0;i<TAM; i++){     
         for(j = 0; j<TAM; j++){
-            grid[i][j] = rand() % 2;  
+            if(i >= rank*part && i < (rank+1)*part){
+                grid[i][j] = rand() % 2;  
+            }else{
+                rand();
+            }
         }
     }
 
-    for(i=0;i<TAM/numProc;i++){
+    for(i=rank*part;i<(rank+1)*part;i++){
         for(j=0;j<TAM;j++) bufSnd[j] = grid[i][j];
         MPI_Send(bufSnd,TAM,MPI_INT,dest,tag,MPI_COMM_WORLD);
     }
 
     for(gen=0;gen<NUM_GEN;gen++){
-        printf("Geração %d\n",gen);
         for(i=0;i<TAM;i++){ // recebe a tabela
             MPI_Barrier(MPI_COMM_WORLD);
             MPI_Bcast(bufRcv,TAM,MPI_INT,PRIN_PROC,MPI_COMM_WORLD);

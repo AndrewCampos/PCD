@@ -6,7 +6,7 @@
 #define NUM_GEN 2000 // Numero de geracoes
 #define TAM 2048 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985
-#define MAX_THREADS 2
+#define MAX_THREADS 8
 #define vivo 1
 #define morto 0
 
@@ -76,7 +76,7 @@ void novaGeracao(){
         }
     }
 
-    #pragma omp parallel private(j) num_threads(MAX_THEADS)
+    #pragma omp parallel private(j) num_threads(MAX_THREADS)
     #pragma omp for
     for(i=0;i<TAM; i++){     
         for(j = 0; j<TAM; j++){
@@ -122,19 +122,18 @@ int main(){
         }
     }
 
+    gettimeofday (&start, NULL);
     printf("Condicao Inicial: %d Celulas Vivas\n", contaPopulacao());
+    gettimeofday (&end, NULL);
+    time = my_difftime(&start, &end);
+    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 
     // Gera NUM_GEN geracoes a partir da primeira
     for(i=0;i<NUM_GEN;i++){
         novaGeracao();
     }
 
-    gettimeofday (&start, NULL);
     printf("Ultima Geracao: %d Celulas Vivas\n", contaPopulacao());
-    gettimeofday (&end, NULL);
-    
-    time = my_difftime(&start, &end);
-    printf("Tempo: %d,%d s\n",time->secs,time->usecs);
 
     return 0;
 }

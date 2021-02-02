@@ -2,7 +2,7 @@
 #include<stdlib.h>
 #include<sys/time.h>
 
-#define NUM_GEN 2000 // Numero de geracoes
+#define NUM_GEN 2 // Numero de geracoes
 #define TAM 2048 // Tamanho N da matriz NxN
 #define SRAND_VALUE 1985
 #define vivo 1
